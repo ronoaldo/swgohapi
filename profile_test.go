@@ -20,15 +20,15 @@ func TestLoadProfile(t *testing.T) {
 	p, err := GetProfile(c, "ronoaldo")
 	log.Printf("First non-cached request: %v", time.Since(start))
 	if err != nil {
-		t.Errorf("Error loading and caching profile: %v", err)
+		t.Fatalf("Error loading and caching profile: %v", err)
 	}
-	log.Printf("First profile retrieved: %v", p)
+	log.Printf("Returned profile (no cache)  %s", p)
 
 	start = time.Now()
 	p, err = GetProfile(c, "ronoaldo")
 	log.Printf("Second, cached request took %v", time.Since(start))
 	if err != nil {
-		t.Errorf("Error loading an already cached profile: %v", err)
+		t.Fatalf("Error loading an already cached profile: %v", err)
 	}
-	log.Printf("Second, cached, profile retrieved: %v", p)
+	log.Printf("Returned profile (cached) %s", p)
 }

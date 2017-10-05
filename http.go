@@ -24,10 +24,13 @@ func ProfileHandler(w http.ResponseWriter, r *http.Request) {
 	p, err := GetProfile(c, user)
 	if err != nil {
 		log.Errorf(c, "Error loading profile: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		if p == nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		} else {
+			log.Debugf(c, "Returning cached profile")
+		}
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(p); err != nil {
 		log.Errorf(c, "Error encoding profile: %v", err)

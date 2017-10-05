@@ -2,6 +2,7 @@ package swgohapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"golang.org/x/net/context"
@@ -18,6 +19,13 @@ type Profile struct {
 	Ships      swgohgg.Ships
 	Arena      []*swgohgg.CharacterStats
 	Stats      []*swgohgg.CharacterStats
+}
+
+func (p *Profile) String() string {
+	if p == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("<Profile: %d characters, %d ships>", len(p.Collection), len(p.Ships))
 }
 
 type ProfileCache struct {
@@ -49,37 +57,138 @@ func GetProfile(c context.Context, user string) (*Profile, error) {
 	err := datastore.Get(c, key, cache)
 	if err == nil {
 		log.Debugf(c, "Returning from cache!")
-		// Found in cache, return it
-		return Decode(cache)
+		// Found in cache, check if expired!
+		profile, err := Decode(cache)
+		if err != nil {
+			return nil, err
+		}
+		log.Debugf(c, "Cached profile for %v", time.Since(profile.LastUpdate))
+		if time.Since(profile.LastUpdate) < 24*time.Hour {
+			return profile, nil
+		}
 	}
 
-	if err != datastore.ErrNoSuchEntity {
+	if err != datastore.ErrNoSuchEntity && err != nil {
 		return nil, err
 	}
 
 	// Profile not cached, let's fetch and save
-	withTimeout, closer := context.WithTimeout(c, 60*time.Second)
+	withTimeout, closer := context.WithTimeout(c, 120*time.Second)
 	defer closer()
 	hc := urlfetch.Client(withTimeout)
 	gg := swgohgg.NewClient(user).UseHTTPClient(hc)
+
 	log.Debugf(c, "Loading arena team ...")
-	if profile.Arena, err = gg.Arena(); err != nil {
-		return nil, err
+	if profile.Arena, profile.LastUpdate, err = gg.Arena(); err != nil {
+		return profile, err
 	}
 	log.Debugf(c, "Loading collection ...")
 	if profile.Collection, err = gg.Collection(); err != nil {
-		return nil, err
+		return profile, err
 	}
 	log.Debugf(c, "Loading ships ...")
 	if profile.Ships, err = gg.Ships(); err != nil {
-		return nil, err
+		return profile, err
 	}
-	// Todo: fetch all character stats and cache it up baby
+	log.Debugf(c, "Loading character stats ...")
+	if err = fetchAllStats(c, gg, profile); err != nil {
+		return profile, err
+	}
+
 	if cache, err = Encode(profile); err != nil {
-		return nil, err
+		return profile, err
 	}
 	if key, err = datastore.Put(c, key, cache); err != nil {
-		return nil, err
+		return profile, err
 	}
 	return profile, nil
+}
+
+// fetchAllStats run parallell code that fetches all user profiles.
+func fetchAllStats(c context.Context, gg *swgohgg.Client, profile *Profile) error {
+	// Split into two workers to half
+	workCount := 10
+	step := len(profile.Collection) / workCount
+
+	buff := make(chan swgohgg.CharacterStats, workCount)
+	done := make(chan bool)
+	errors := make(chan error, 5)
+	errorList := make([]error, 0)
+
+	fetchBlock := func(worker, start, limit int, buff chan swgohgg.CharacterStats, done chan bool, errors chan error) {
+		log.Debugf(c, "Starting worker %d [%d:%d]", worker, start, limit)
+		retryCount := 0
+		for i := start; i < limit; i++ {
+			char := profile.Collection[i]
+			if char.Stars <= 0 {
+				log.Debugf(c, "[%d] Ignored inactive character %s", worker, char.Name)
+				continue
+			}
+			log.Debugf(c, "[%d] Loading %s ...", worker, char.Name)
+			stat, err := gg.CharacterStats(char.Name)
+			if err != nil {
+				i--
+				retryCount++
+				time.Sleep(1 * time.Second)
+				if retryCount > 2 {
+					errors <- err
+					break
+				}
+				continue
+			}
+			buff <- *stat
+		}
+		log.Debugf(c, "[%d] Worker completed", worker)
+		done <- true
+	}
+
+	aggregate := func(profile *Profile, buff chan swgohgg.CharacterStats) {
+		for stat := range buff {
+			statCopy := stat
+			profile.Stats = append(profile.Stats, &statCopy)
+			log.Debugf(c, "Stats so far %d", len(profile.Stats))
+		}
+	}
+
+	aggregateErr := func(out []error, errors chan error, done chan bool) {
+		for err := range errors {
+			log.Debugf(c, "> Error: %v", err)
+			out = append(out, err)
+		}
+		done <- true
+	}
+
+	// Star worker until buffer is empty
+	go aggregate(profile, buff)
+	go aggregateErr(errorList, errors, done)
+
+	// Run and wait both parallell tasks to fetch all data
+	log.Debugf(c, "Starting all workers ...")
+	start := 0
+	for i := 0; i < workCount; i++ {
+		if i == (workCount - 1) {
+			go fetchBlock(i, start, len(profile.Collection), buff, done, errors)
+		} else {
+			go fetchBlock(i, start, start+step, buff, done, errors)
+		}
+		start += step
+	}
+	// Wait each worker to exit
+	for i := 0; i < workCount; i++ {
+		<-done
+	}
+	log.Debugf(c, "All workers are done! Closing channels ... ")
+
+	// Close buff to finish off aggregate
+	close(buff)
+	// Close error channel and wait final worker
+	close(errors)
+	<-done
+
+	// Wait to consume all errors
+	if len(errorList) > 0 {
+		return fmt.Errorf("Several errors: %v", errorList)
+	}
+
+	return nil
 }
