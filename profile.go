@@ -58,30 +58,42 @@ func GetProfile(c context.Context, user string) (*Profile, error) {
 	if err == nil {
 		log.Debugf(c, "Returning from cache!")
 		// Found in cache, check if expired!
-		profile, err := Decode(cache)
+		profile, err = Decode(cache)
 		if err != nil {
 			return nil, err
 		}
 		log.Debugf(c, "Cached profile for %v", time.Since(profile.LastUpdate))
 		if time.Since(profile.LastUpdate) < 24*time.Hour {
+			log.Debugf(c, "Not checking uptime, profile from cache is fresh")
 			return profile, nil
 		}
 	}
-
 	if err != datastore.ErrNoSuchEntity && err != nil {
 		return nil, err
 	}
 
-	// Profile not cached, let's fetch and save
+	// Profile not cached, let's fetch and save after some checking
 	withTimeout, closer := context.WithTimeout(c, 120*time.Second)
 	defer closer()
 	hc := urlfetch.Client(withTimeout)
 	gg := swgohgg.NewClient(user).UseHTTPClient(hc)
 
 	log.Debugf(c, "Loading arena team ...")
-	if profile.Arena, profile.LastUpdate, err = gg.Arena(); err != nil {
+	arena, lastUpdate, err := gg.Arena()
+	if err != nil {
 		return profile, err
 	}
+	log.Debugf(c, "Site last update was %v ago", time.Since(lastUpdate))
+	// Check if we need a full reload. If website is lower than a day, and we
+	// are not, let's reload. Otherwise, assume website is also outdated.
+	if time.Since(lastUpdate) > 24*time.Hour {
+		log.Debugf(c, "Site is probably as old as us, lets use what we have here.")
+		return profile, err
+	}
+
+	profile.Arena = arena
+	profile.LastUpdate = lastUpdate
+
 	log.Debugf(c, "Loading collection ...")
 	if profile.Collection, err = gg.Collection(); err != nil {
 		return profile, err
@@ -90,10 +102,12 @@ func GetProfile(c context.Context, user string) (*Profile, error) {
 	if profile.Ships, err = gg.Ships(); err != nil {
 		return profile, err
 	}
-	log.Debugf(c, "Loading character stats ...")
-	if err = fetchAllStats(c, gg, profile); err != nil {
-		return profile, err
-	}
+	/*
+		log.Debugf(c, "Loading character stats ...")
+		if err = fetchAllStats(c, gg, profile); err != nil {
+			return profile, err
+		}
+	*/
 
 	if cache, err = Encode(profile); err != nil {
 		return profile, err
