@@ -86,7 +86,7 @@ func GetProfile(c context.Context, user string) (*Profile, error) {
 	log.Debugf(c, "Site last update was %v ago", time.Since(lastUpdate))
 	// Check if we need a full reload. If website is lower than a day, and we
 	// are not, let's reload. Otherwise, assume website is also outdated.
-	if time.Since(lastUpdate) > 24*time.Hour {
+	if !profile.LastUpdate.IsZero() && time.Since(lastUpdate) > 24*time.Hour {
 		log.Debugf(c, "Site is probably as old as us, lets use what we have here.")
 		return profile, err
 	}
