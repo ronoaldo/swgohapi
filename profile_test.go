@@ -17,7 +17,7 @@ func TestLoadProfile(t *testing.T) {
 
 	// Test if we can encode the whole shit
 	start := time.Now()
-	p, err := GetProfile(c, "ronoaldo")
+	p, err := GetProfile(c, "ronoaldo", true)
 	log.Printf("First non-cached request: %v", time.Since(start))
 	if err != nil {
 		t.Fatalf("Error loading and caching profile: %v", err)
@@ -25,7 +25,7 @@ func TestLoadProfile(t *testing.T) {
 	log.Printf("Returned profile (no cache)  %s", p)
 
 	start = time.Now()
-	p, err = GetProfile(c, "ronoaldo")
+	p, err = GetProfile(c, "ronoaldo", true)
 	log.Printf("Second, cached request took %v", time.Since(start))
 	if err != nil {
 		t.Fatalf("Error loading an already cached profile: %v", err)

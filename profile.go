@@ -2,11 +2,13 @@ package swgohapi
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 
 	"golang.org/x/net/context"
 	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/log"
+	"google.golang.org/appengine/taskqueue"
 	"google.golang.org/appengine/urlfetch"
 	"ronoaldo.gopkg.net/swgoh/swgohgg"
 )
@@ -27,20 +29,21 @@ func (p *Profile) String() string {
 	return fmt.Sprintf("<Profile: %d characters, %d ships>", len(p.Collection), len(p.Ships))
 }
 
-func GetProfile(c context.Context, user string) (*Profile, error) {
+func GetProfile(c context.Context, user string, fullUpdate bool) (*Profile, error) {
 	// Try to load from cache
+	log.Infof(c, "Loading profile %v (fullUpdate=%v)", user, fullUpdate)
 	playerData, err := GetPlayerData(c, user)
 	profile := &Profile{}
 	if err == nil {
-		log.Debugf(c, "Returning from cache!")
+		log.Infof(c, "Returning from cache!")
 		// Found in cache, check if expired!
 		profile, err = playerData.Decode()
 		if err != nil {
 			return nil, err
 		}
-		log.Debugf(c, "Cached playerData found, updated %v ago", time.Since(profile.LastUpdate))
-		if time.Since(profile.LastUpdate) < 24*time.Hour {
-			log.Debugf(c, "Not checking uptime, profile from cache is fresh.")
+		log.Infof(c, "Cached playerData found, updated %v ago", time.Since(profile.LastUpdate))
+		if time.Since(profile.LastUpdate) < 24*time.Hour && !fullUpdate {
+			log.Infof(c, "Not checking uptime, profile from cache is fresh.")
 			return profile, nil
 		}
 	}
@@ -54,36 +57,44 @@ func GetProfile(c context.Context, user string) (*Profile, error) {
 	hc := urlfetch.Client(withTimeout)
 	gg := swgohgg.NewClient(user).UseHTTPClient(hc)
 
-	log.Debugf(c, "Loading arena team ...")
+	log.Infof(c, "Loading arena team ...")
 	arena, lastUpdate, err := gg.Arena()
 	if err != nil {
 		return profile, err
 	}
-	log.Debugf(c, "Site last update was %v ago", time.Since(lastUpdate))
+	log.Infof(c, "Site last update was %v ago", time.Since(lastUpdate))
 	// Check if we need a full reload. If website is lower than a day, and we
 	// are not, let's reload. Otherwise, assume website is also outdated.
 	if !profile.LastUpdate.IsZero() && time.Since(lastUpdate) > 24*time.Hour {
-		log.Debugf(c, "Site is probably as old as us, lets use what we have here.")
+		log.Infof(c, "Site is probably as old as us, lets use what we have here.")
 		return profile, err
 	}
 
 	profile.Arena = arena
 	profile.LastUpdate = lastUpdate
 
-	log.Debugf(c, "Loading collection ...")
+	log.Infof(c, "Loading collection ...")
 	if profile.Collection, err = gg.Collection(); err != nil {
 		return profile, err
 	}
-	log.Debugf(c, "Loading ships ...")
+	log.Infof(c, "Loading ships ...")
 	if profile.Ships, err = gg.Ships(); err != nil {
 		return profile, err
 	}
-	/*
-		log.Debugf(c, "Loading character stats ...")
+	if fullUpdate {
+		log.Infof(c, "Loading character stats ...")
 		if err = fetchAllStats(c, gg, profile); err != nil {
 			return profile, err
 		}
-	*/
+	} else {
+		log.Infof(c, "Scheduling full stats update ...")
+		t := taskqueue.NewPOSTTask("/v1/profile/"+user, url.Values{
+			"fullUpdate": {"true"},
+		})
+		if _, err := taskqueue.Add(c, t, "sync"); err != nil {
+			log.Warningf(c, "Failed to schedule task: %v", err)
+		}
+	}
 	if err = playerData.Encode(profile); err != nil {
 		return profile, err
 	}
@@ -105,15 +116,15 @@ func fetchAllStats(c context.Context, gg *swgohgg.Client, profile *Profile) erro
 	errorList := make([]error, 0)
 
 	fetchBlock := func(worker, start, limit int, buff chan swgohgg.CharacterStats, done chan bool, errors chan error) {
-		log.Debugf(c, "Starting worker %d [%d:%d]", worker, start, limit)
+		log.Infof(c, "Starting worker %d [%d:%d]", worker, start, limit)
 		retryCount := 0
 		for i := start; i < limit; i++ {
 			char := profile.Collection[i]
 			if char.Stars <= 0 {
-				log.Debugf(c, "[%d] Ignored inactive character %s", worker, char.Name)
+				log.Infof(c, "[%d] Ignored inactive character %s", worker, char.Name)
 				continue
 			}
-			log.Debugf(c, "[%d] Loading %s ...", worker, char.Name)
+			log.Infof(c, "[%d] Loading %s ...", worker, char.Name)
 			stat, err := gg.CharacterStats(char.Name)
 			if err != nil {
 				i--
@@ -127,7 +138,7 @@ func fetchAllStats(c context.Context, gg *swgohgg.Client, profile *Profile) erro
 			}
 			buff <- *stat
 		}
-		log.Debugf(c, "[%d] Worker completed", worker)
+		log.Infof(c, "[%d] Worker completed", worker)
 		done <- true
 	}
 
@@ -135,13 +146,13 @@ func fetchAllStats(c context.Context, gg *swgohgg.Client, profile *Profile) erro
 		for stat := range buff {
 			statCopy := stat
 			profile.Stats = append(profile.Stats, &statCopy)
-			log.Debugf(c, "Stats so far %d", len(profile.Stats))
+			log.Infof(c, "Stats so far %d", len(profile.Stats))
 		}
 	}
 
 	aggregateErr := func(out []error, errors chan error, done chan bool) {
 		for err := range errors {
-			log.Debugf(c, "> Error: %v", err)
+			log.Infof(c, "> Error: %v", err)
 			out = append(out, err)
 		}
 		done <- true
@@ -152,7 +163,7 @@ func fetchAllStats(c context.Context, gg *swgohgg.Client, profile *Profile) erro
 	go aggregateErr(errorList, errors, done)
 
 	// Run and wait both parallell tasks to fetch all data
-	log.Debugf(c, "Starting all workers ...")
+	log.Infof(c, "Starting all workers ...")
 	start := 0
 	for i := 0; i < workCount; i++ {
 		if i == (workCount - 1) {
@@ -166,7 +177,7 @@ func fetchAllStats(c context.Context, gg *swgohgg.Client, profile *Profile) erro
 	for i := 0; i < workCount; i++ {
 		<-done
 	}
-	log.Debugf(c, "All workers are done! Closing channels ... ")
+	log.Infof(c, "All workers are done! Closing channels ... ")
 
 	// Close buff to finish off aggregate
 	close(buff)
