@@ -1,7 +1,6 @@
 package swgohapi
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -28,43 +27,20 @@ func (p *Profile) String() string {
 	return fmt.Sprintf("<Profile: %d characters, %d ships>", len(p.Collection), len(p.Ships))
 }
 
-type ProfileCache struct {
-	Data []byte
-}
-
-func Encode(profile *Profile) (*ProfileCache, error) {
-	b, err := json.Marshal(profile)
-	if err != nil {
-		return nil, err
-	}
-	return &ProfileCache{b}, nil
-}
-
-func Decode(cache *ProfileCache) (*Profile, error) {
-	var profile Profile
-	err := json.Unmarshal(cache.Data, &profile)
-	if err != nil {
-		return nil, err
-	}
-	return &profile, nil
-}
-
 func GetProfile(c context.Context, user string) (*Profile, error) {
 	// Try to load from cache
+	playerData, err := GetPlayerData(c, user)
 	profile := &Profile{}
-	cache := &ProfileCache{}
-	key := datastore.NewKey(c, "ProfileCache", user, 0, nil)
-	err := datastore.Get(c, key, cache)
 	if err == nil {
 		log.Debugf(c, "Returning from cache!")
 		// Found in cache, check if expired!
-		profile, err = Decode(cache)
+		profile, err = playerData.Decode()
 		if err != nil {
 			return nil, err
 		}
-		log.Debugf(c, "Cached profile for %v", time.Since(profile.LastUpdate))
+		log.Debugf(c, "Cached playerData found, updated %v ago", time.Since(profile.LastUpdate))
 		if time.Since(profile.LastUpdate) < 24*time.Hour {
-			log.Debugf(c, "Not checking uptime, profile from cache is fresh")
+			log.Debugf(c, "Not checking uptime, profile from cache is fresh.")
 			return profile, nil
 		}
 	}
@@ -108,11 +84,10 @@ func GetProfile(c context.Context, user string) (*Profile, error) {
 			return profile, err
 		}
 	*/
-
-	if cache, err = Encode(profile); err != nil {
+	if err = playerData.Encode(profile); err != nil {
 		return profile, err
 	}
-	if key, err = datastore.Put(c, key, cache); err != nil {
+	if err = SavePlayerData(c, user, playerData); err != nil {
 		return profile, err
 	}
 	return profile, nil
