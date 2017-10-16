@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
@@ -47,7 +48,7 @@ func ProfileHandler(w http.ResponseWriter, r *http.Request) {
 func ReloadAll(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 	log.Infof(c, "Running schedule all")
-	q := datastore.NewQuery(PlayerDataKind).KeysOnly()
+	q := datastore.NewQuery(PlayerDataKind)
 	tasks := make([]*taskqueue.Task, 0)
 	for t := q.Run(c); ; {
 		var p PlayerData
@@ -57,12 +58,20 @@ func ReloadAll(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			log.Warningf(c, "Error loading player data: %v", err)
+			return
 		}
-		tasks = append(tasks, taskqueue.NewPOSTTask("/v1/profile/"+key.StringID(), url.Values{}))
+		if time.Since(p.LastUpdate) < 24*time.Hour {
+			log.Debugf(c, "Profile skipped, recently updated.")
+			continue
+		}
+		escapedProfile := url.QueryEscape(key.StringID())
+		escapedProfile = strings.Replace(escapedProfile, "+", "%20", -1)
+		tasks = append(tasks, taskqueue.NewPOSTTask("/v1/profile/"+escapedProfile, url.Values{}))
+		log.Debugf(c, "Added task for %s", escapedProfile)
 		if len(tasks) > 10 {
 			log.Infof(c, "Scheduling profiles %v", tasks)
 			if _, err := taskqueue.AddMulti(c, tasks, "sync"); err != nil {
-				log.Warningf(c, "Error scheduling: %v")
+				log.Warningf(c, "Error scheduling: %v", err)
 			}
 			tasks = make([]*taskqueue.Task, 0)
 		}
@@ -70,7 +79,7 @@ func ReloadAll(w http.ResponseWriter, r *http.Request) {
 	if len(tasks) > 0 {
 		log.Infof(c, "Scheduling profiles %v", tasks)
 		if _, err := taskqueue.AddMulti(c, tasks, "sync"); err != nil {
-			log.Warningf(c, "Error scheduling: %v")
+			log.Warningf(c, "Error scheduling: %v", err)
 		}
 	}
 }
