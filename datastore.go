@@ -11,7 +11,7 @@ import (
 	"google.golang.org/appengine/memcache"
 )
 
-const PlayerDataKind = "PlayerData" // Rename in datastore?
+const PlayerDataKind = "ProfileCache"
 
 type PlayerData struct {
 	Key        *datastore.Key `datastore:"-"`
