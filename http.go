@@ -48,7 +48,8 @@ func ProfileHandler(w http.ResponseWriter, r *http.Request) {
 func ReloadAll(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 	log.Infof(c, "Running schedule all")
-	q := datastore.NewQuery(PlayerDataKind)
+	q := datastore.NewQuery(PlayerDataKind).
+		Filter("LastUpdate <", time.Now().Add(-24*time.Hour))
 	tasks := make([]*taskqueue.Task, 0)
 	for t := q.Run(c); ; {
 		var p PlayerData
