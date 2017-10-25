@@ -17,15 +17,17 @@ func TestLoadProfile(t *testing.T) {
 
 	// Test if we can encode the whole shit
 	start := time.Now()
-	p, err := GetProfile(c, "ronoaldo", true)
+	p, err := GetProfile(c, "ronoaldo")
 	log.Printf("First non-cached request: %v", time.Since(start))
 	if err != nil {
 		t.Fatalf("Error loading and caching profile: %v", err)
 	}
 	log.Printf("Returned profile (no cache)  %s", p)
 
+	ReloadProfile(c, "ronoaldo", false)
+
 	start = time.Now()
-	p, err = GetProfile(c, "ronoaldo", true)
+	p, err = GetProfile(c, "ronoaldo")
 	log.Printf("Second, cached request took %v", time.Since(start))
 	if err != nil {
 		t.Fatalf("Error loading an already cached profile: %v", err)

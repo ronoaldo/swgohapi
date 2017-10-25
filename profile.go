@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"time"
 
+	"regexp"
+
 	"golang.org/x/net/context"
 	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/log"
@@ -29,29 +31,40 @@ func (p *Profile) String() string {
 	return fmt.Sprintf("<Profile: %d characters, %d ships>", len(p.Collection), len(p.Ships))
 }
 
-func GetProfile(c context.Context, user string, fullUpdate bool) (*Profile, error) {
-	// Try to load from cache
-	log.Infof(c, "Loading profile %v (fullUpdate=%v)", user, fullUpdate)
-	playerData, err := GetPlayerData(c, user)
-	profile := &Profile{}
-	if err == nil {
-		log.Infof(c, "Returning from cache!")
-		// Found in cache, check if expired!
-		profile, err = playerData.Decode()
-		if err != nil {
-			return nil, err
-		}
-		log.Infof(c, "Cached playerData found, updated %v ago", time.Since(profile.LastUpdate))
-		if time.Since(profile.LastUpdate) < 24*time.Hour && !fullUpdate {
-			log.Infof(c, "Not checking uptime, profile from cache is fresh.")
-			return profile, nil
-		}
+var safeQueueNameRe = regexp.MustCompile("[^a-zA-Z0-9-]")
+
+func safeQueueName(src string) string {
+	return safeQueueNameRe.ReplaceAllString(src, "-")
+}
+
+// ReloadProfileAsync schedule the reload of a profile
+func ReloadProfileAsync(c context.Context, user string, force bool) error {
+	log.Infof(c, "Scheduling full stats update ...")
+	t := taskqueue.NewPOSTTask("/v1/profile/"+user, url.Values{
+		"fullUpdate": {"true"},
+	})
+	if !force {
+		// Use a task name so we avoid reloading like a crazy bitch.
+		t.Name = safeQueueName(user) + time.Now().Format("-20060102")
 	}
-	if err != datastore.ErrNoSuchEntity && err != nil {
+	if _, err := taskqueue.Add(c, t, "sync"); err != nil {
+		log.Warningf(c, "Failed to schedule task: %v", err)
+	}
+	return nil
+}
+
+// ReloadProfile fetches all data from the website and saves the
+// resulting cache in the datastore/memcache.
+func ReloadProfile(c context.Context, user string, fullUpdate bool) (*Profile, error) {
+	profile, err := GetProfile(c, user)
+	if err != nil {
 		return nil, err
 	}
+	if profile == nil {
+		// We don't have the profile
+		profile = &Profile{}
+	}
 
-	// Profile not cached, let's fetch and save after some checking
 	withTimeout, closer := context.WithTimeout(c, 120*time.Second)
 	defer closer()
 	hc := urlfetch.Client(withTimeout)
@@ -60,15 +73,9 @@ func GetProfile(c context.Context, user string, fullUpdate bool) (*Profile, erro
 	log.Infof(c, "Loading arena team ...")
 	arena, lastUpdate, err := gg.Arena()
 	if err != nil {
-		return profile, err
+		return nil, err
 	}
 	log.Infof(c, "Site last update was %v ago", time.Since(lastUpdate))
-	// Check if we need a full reload. If website is lower than a day, and we
-	// are not, let's reload. Otherwise, assume website is also outdated.
-	if !profile.LastUpdate.IsZero() && time.Since(lastUpdate) > 24*time.Hour && !fullUpdate {
-		log.Infof(c, "Site is probably as old as us, lets use what we have here.")
-		return profile, err
-	}
 
 	profile.Arena = arena
 	profile.LastUpdate = lastUpdate
@@ -87,14 +94,10 @@ func GetProfile(c context.Context, user string, fullUpdate bool) (*Profile, erro
 			return profile, err
 		}
 	} else {
-		log.Infof(c, "Scheduling full stats update ...")
-		t := taskqueue.NewPOSTTask("/v1/profile/"+user, url.Values{
-			"fullUpdate": {"true"},
-		})
-		if _, err := taskqueue.Add(c, t, "sync"); err != nil {
-			log.Warningf(c, "Failed to schedule task: %v", err)
-		}
+		return profile, ReloadProfileAsync(c, user, true)
 	}
+
+	playerData := &PlayerData{}
 	if err = playerData.Encode(profile); err != nil {
 		return profile, err
 	}
@@ -102,6 +105,31 @@ func GetProfile(c context.Context, user string, fullUpdate bool) (*Profile, erro
 		return profile, err
 	}
 	return profile, nil
+}
+
+// GetProfile returns a cached profile from the Datastore/Memcache or nil if not found
+func GetProfile(c context.Context, user string) (*Profile, error) {
+	// Try to load from cache
+	log.Infof(c, "Loading profile %v", user)
+	playerData, err := GetPlayerData(c, user)
+	profile := &Profile{}
+	// Load from cache and decode profile
+	if err == nil {
+		log.Infof(c, "Returning from cache!")
+		// Found in cache, check if expired!
+		profile, err = playerData.Decode()
+		if err != nil {
+			return nil, err
+		}
+		log.Infof(c, "Cached playerData found, updated %v ago", time.Since(profile.LastUpdate))
+		return profile, nil
+	}
+	// If error loading
+	if err != datastore.ErrNoSuchEntity && err != nil {
+		return nil, err
+	}
+	// Not found, (nil, nil)
+	return nil, nil
 }
 
 // fetchAllStats run parallell code that fetches all user profiles.
