@@ -26,6 +26,10 @@ func ProfileHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid profile: "+user, http.StatusBadRequest)
 		return
 	}
+	// TODO: use always lower case username - normalizes a lot of bugs.
+	if unescaped, err := url.QueryUnescape(user); err == nil {
+		user = unescaped
+	}
 	// For simplicity, if we are told to reaload, just parse the whole
 	// data from site and save again.
 	fullUpdate := r.FormValue("fullUpdate") == "true"
