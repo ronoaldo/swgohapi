@@ -95,15 +95,10 @@ func ReloadProfile(c context.Context, user string, fullUpdate bool) (*Profile, e
 	if profile.Ships, err = gg.Ships(); err != nil {
 		return profile, err
 	}
-	if fullUpdate {
-		log.Infof(c, "Loading character stats ...")
-		if err = fetchAllStats(c, gg, profile); err != nil {
-			return profile, err
-		}
-	} else {
-		return profile, ReloadProfileAsync(c, user, true)
+	log.Infof(c, "Loading character stats ...")
+	if err = fetchAllStats(c, gg, profile); err != nil {
+		return profile, err
 	}
-
 	playerData := &PlayerData{}
 	if err = playerData.Encode(profile); err != nil {
 		return profile, err

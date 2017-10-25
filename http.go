@@ -34,7 +34,13 @@ func ProfileHandler(w http.ResponseWriter, r *http.Request) {
 	// data from site and save again.
 	fullUpdate := r.FormValue("fullUpdate") == "true"
 	if fullUpdate {
-		ReloadProfile(c, user, fullUpdate)
+		log.Infof(c, "Reloading profile (fullUpdate=true)")
+		_, err := ReloadProfile(c, user, fullUpdate)
+		if err != nil {
+			log.Warningf(c, "Unable to reload profile: %v", err)
+			return
+		}
+		log.Infof(c, "Profile reloaded")
 	}
 
 	// Lookup the cached profile...

@@ -2,3 +2,4 @@ cron:
 - description: daily profile update
   url: /admin/reloadAll
   schedule: every 6 hours
+  task_retry_limit: 5
