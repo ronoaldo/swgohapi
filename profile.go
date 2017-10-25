@@ -3,6 +3,7 @@ package swgohapi
 import (
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"regexp"
@@ -39,7 +40,13 @@ func safeQueueName(src string) string {
 
 // ReloadProfileAsync schedule the reload of a profile
 func ReloadProfileAsync(c context.Context, user string, force bool) error {
-	log.Infof(c, "Scheduling full stats update ...")
+	if unescaped, err := url.QueryUnescape(user); err == nil {
+		// If we could escape first
+		user = unescaped
+	}
+	user = url.QueryEscape(user)
+	user = strings.Replace(user, "+", "%20", -1)
+	log.Infof(c, "Scheduling full stats update for '%v' ...", user)
 	t := taskqueue.NewPOSTTask("/v1/profile/"+user, url.Values{
 		"fullUpdate": {"true"},
 	})
