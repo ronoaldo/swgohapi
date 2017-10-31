@@ -18,6 +18,8 @@ func init() {
 	http.HandleFunc("/admin/reloadAll", ReloadAll)
 }
 
+// ProfileHandler renders the profile or cache the profile if the fullUpdate
+// parameter is provided.
 func ProfileHandler(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 	user := strings.Replace(r.URL.Path, "/v1/profile/", "", -1)
@@ -60,7 +62,7 @@ func ProfileHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "{\"Status\": \"Reloading\"}", http.StatusAccepted)
 		return
 	}
-	// ... render the API response
+	// ... render the API response if we get a valid, cached data.
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(p); err != nil {
 		log.Errorf(c, "Error encoding profile: %v", err)

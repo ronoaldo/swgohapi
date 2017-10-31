@@ -28,7 +28,6 @@ func TestSaveAndGetPlayerData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error loading saved player data: %v", err)
 	}
-	t.Logf("Get/Set:\noriginal: %v\ncached %v")
 	if cached.LastUpdate.Unix() != playerData.LastUpdate.Unix() {
 		t.Fatalf("Cached data: %v !=  profile data:  %v", cached.LastUpdate, playerData.LastUpdate)
 	}
