@@ -29,8 +29,7 @@ It requires a Google Cloud Platform account, but depending on your
 usage, you should stay in the free quota. You also will need to
 install Google Cloud SDK and Google App Engine Go SDK.
 
-    gcloud app deploy *.yaml --project=your-project-id
-
+	appcfg.py update -A your-project-id -v beta .
 
 Please refer to the Google Cloud Platform documentation on Google
-App Engine and setting up `gcloud`.
+App Engine and setting up `gcloud` and the SDK.
