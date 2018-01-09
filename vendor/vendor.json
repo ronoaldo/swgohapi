@@ -33,10 +33,10 @@
 			"revisionTime": "2016-08-13T22:13:03Z"
 		},
 		{
-			"checksumSHA1": "2EE7VRdxmEh1zeutSFWdjgyAhX4=",
+			"checksumSHA1": "cjBFMemziCmRG8989pbljsLbFVc=",
 			"path": "github.com/ronoaldo/swgoh/swgohgg",
-			"revision": "38367d4c0380344f45d5e590a947a8995d211c4b",
-			"revisionTime": "2018-01-06T15:17:51Z"
+			"revision": "11415becd224ebea6016c75ce6a41ad62ceaa5d8",
+			"revisionTime": "2018-01-09T01:42:10Z"
 		},
 		{
 			"checksumSHA1": "GtamqiJoL7PGHsN454AoffBFMa8=",
@@ -171,5 +171,5 @@
 			"revisionTime": "2017-12-12T22:30:47Z"
 		}
 	],
-	"rootPath": "github.com/ronoaldo/swgoh-api"
+	"rootPath": "github.com/ronoaldo/swgohapi"
 }
