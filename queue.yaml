@@ -2,4 +2,5 @@ queue:
 - name: sync
   rate: 10/s
   max_concurrent_requests: 10
-  task_retry_limit: 5
+  retry_parameters:
+    task_retry_limit: 5

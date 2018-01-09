@@ -13,7 +13,7 @@ import (
 	"google.golang.org/appengine/log"
 	"google.golang.org/appengine/taskqueue"
 	"google.golang.org/appengine/urlfetch"
-	"ronoaldo.gopkg.net/swgoh/swgohgg"
+	"github.com/ronoaldo/swgoh/swgohgg"
 )
 
 // Profile is an entity that saves user data from the website
