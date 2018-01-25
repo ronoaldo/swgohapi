@@ -62,6 +62,11 @@ func ProfileHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "{\"Status\": \"Reloading\"}", http.StatusAccepted)
 		return
 	}
+	if r.Header.Get("X-AppEngine-TaskName") != "" {
+		log.Infof(c, "Running from Task Queue, not rendering response payload.")
+		w.Write([]byte("OK"))
+		return
+	}
 	// ... render the API response if we get a valid, cached data.
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
@@ -90,7 +95,7 @@ func ReloadAll(w http.ResponseWriter, r *http.Request) {
 	for _, key := range expired {
 		escapedProfile := url.QueryEscape(key.StringID())
 		escapedProfile = strings.Replace(escapedProfile, "+", "%20", -1)
-		tasks = append(tasks, taskqueue.NewPOSTTask("/v1/profile/"+escapedProfile, url.Values{}))
+		tasks = append(tasks, taskqueue.NewPOSTTask("/v1/profile/"+escapedProfile, url.Values{"fullUpdate": []string{"true"}}))
 		log.Debugf(c, "Added task for %s", escapedProfile)
 		if len(tasks) > 10 {
 			log.Infof(c, "Scheduling profiles %v", tasks)
