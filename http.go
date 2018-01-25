@@ -64,6 +64,7 @@ func ProfileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// ... render the API response if we get a valid, cached data.
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
 	if err = json.NewEncoder(w).Encode(p); err != nil {
 		log.Errorf(c, "Error encoding profile: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -76,7 +77,7 @@ func ReloadAll(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 	log.Infof(c, "Running schedule all routine ... ")
 	q := datastore.NewQuery(PlayerDataKind).
-		Filter("LastUpdate <", time.Now().Add(-24*time.Hour)).
+		Filter("LastUpdate <", time.Now().Add(-6*time.Hour)).
 		KeysOnly()
 	expired, err := q.GetAll(c, nil)
 	if err != nil {
