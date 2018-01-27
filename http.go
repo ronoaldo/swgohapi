@@ -82,7 +82,7 @@ func ReloadAll(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 	log.Infof(c, "Running schedule all routine ... ")
 	q := datastore.NewQuery(PlayerDataKind).
-		Filter("LastUpdate <", time.Now().Add(-6*time.Hour)).
+		Filter("LastUpdate <", time.Now().Add(-24*time.Hour)).
 		KeysOnly()
 	expired, err := q.GetAll(c, nil)
 	if err != nil {
@@ -95,7 +95,9 @@ func ReloadAll(w http.ResponseWriter, r *http.Request) {
 	for _, key := range expired {
 		escapedProfile := url.QueryEscape(key.StringID())
 		escapedProfile = strings.Replace(escapedProfile, "+", "%20", -1)
-		tasks = append(tasks, taskqueue.NewPOSTTask("/v1/profile/"+escapedProfile, url.Values{"fullUpdate": []string{"true"}}))
+		tasks = append(tasks, taskqueue.NewPOSTTask("/v1/profile/"+escapedProfile, url.Values{
+			"fullUpdate": {"true"},
+		}))
 		log.Debugf(c, "Added task for %s", escapedProfile)
 		if len(tasks) > 10 {
 			log.Infof(c, "Scheduling profiles %v", tasks)

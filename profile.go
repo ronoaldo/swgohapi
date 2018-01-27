@@ -8,12 +8,12 @@ import (
 
 	"regexp"
 
+	"github.com/ronoaldo/swgoh/swgohgg"
 	"golang.org/x/net/context"
 	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/log"
 	"google.golang.org/appengine/taskqueue"
 	"google.golang.org/appengine/urlfetch"
-	"github.com/ronoaldo/swgoh/swgohgg"
 )
 
 // Profile is an entity that saves user data from the website
@@ -97,7 +97,7 @@ func ReloadProfile(c context.Context, user string, fullUpdate bool) (*Profile, e
 	}
 	log.Infof(c, "Loading character stats ...")
 	if err = fetchAllStats(c, gg, profile); err != nil {
-		return profile, err
+		log.Warningf(c, "Errors during fetchAllstats: %#v", err)
 	}
 	playerData := &PlayerData{}
 	if err = playerData.Encode(profile); err != nil {
