@@ -77,15 +77,19 @@ func ReloadProfile(c context.Context, user string, fullUpdate bool) (*Profile, e
 	hc := urlfetch.Client(withTimeout)
 	gg := swgohgg.NewClient(user).UseHTTPClient(hc)
 
-	log.Infof(c, "Loading arena team ...")
+	// Temporary disable anything related to the character stats.
+	// Arena() and fetchAllStats() are not going to work as the website
+	// now requires login information to be provided
+	/*log.Infof(c, "Loading arena team ...")
 	arena, lastUpdate, err := gg.Arena()
 	if err != nil {
 		return nil, err
 	}
 	log.Infof(c, "Site last update was %v ago", time.Since(lastUpdate))
-
 	profile.Arena = arena
 	profile.LastUpdate = lastUpdate
+	*/
+	profile.LastUpdate = time.Now()
 
 	log.Infof(c, "Loading collection ...")
 	if profile.Collection, err = gg.Collection(); err != nil {
@@ -95,10 +99,11 @@ func ReloadProfile(c context.Context, user string, fullUpdate bool) (*Profile, e
 	if profile.Ships, err = gg.Ships(); err != nil {
 		return profile, err
 	}
-	log.Infof(c, "Loading character stats ...")
+	/*log.Infof(c, "Loading character stats ...")
 	if err = fetchAllStats(c, gg, profile); err != nil {
 		log.Warningf(c, "Errors during fetchAllstats: %#v", err)
 	}
+	*/
 	playerData := &PlayerData{}
 	if err = playerData.Encode(profile); err != nil {
 		return profile, err
@@ -137,7 +142,7 @@ func GetProfile(c context.Context, user string) (*Profile, error) {
 // fetchAllStats run parallell code that fetches all user profiles.
 func fetchAllStats(c context.Context, gg *swgohgg.Client, profile *Profile) error {
 	// Split into two workers to half
-	workCount := 10
+	workCount := 2
 	step := len(profile.Collection) / workCount
 
 	buff := make(chan swgohgg.CharacterStats, workCount)
