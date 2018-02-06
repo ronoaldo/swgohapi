@@ -21,8 +21,8 @@ type Profile struct {
 	LastUpdate time.Time
 	Collection swgohgg.Collection
 	Ships      swgohgg.Ships
-	Arena      []*swgohgg.CharacterStats
-	Stats      []*swgohgg.CharacterStats
+	Arena      []*swgohgg.CharacterStats `json:"-"`
+	Stats      []*swgohgg.CharacterStats `json:"-"`
 }
 
 func (p *Profile) String() string {
