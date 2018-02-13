@@ -90,3 +90,40 @@ func SavePlayerData(c context.Context, player string, playerData *PlayerData) (e
 	}
 	return err
 }
+
+// PlayerStats represents system-wide player profile statistics
+type PlayerStats struct {
+	PlayerCount      int
+	StalePlayerCount int
+
+	OldestPlayerSync time.Time `datastore:"LastUpdate"`
+}
+
+// GetPlayerStats returns basic statistics about player profiles in the system.
+func GetPlayerStats(c context.Context) (s PlayerStats, err error) {
+	s = PlayerStats{}
+	// Query how many player profiles we have in database.
+	s.PlayerCount, err = datastore.NewQuery(PlayerDataKind).
+		Count(c)
+	if err != nil {
+		return
+	}
+	// Query how many stale profiles we have currently.
+	s.StalePlayerCount, err = datastore.NewQuery(PlayerDataKind).
+		Filter("LastUpdate <= ", time.Now().AddDate(0, 0, -1)).
+		Count(c)
+	if err != nil {
+		return
+	}
+	// Query the oldest data we have.
+	_, err = datastore.NewQuery(PlayerDataKind).
+		Order("LastUpdate").
+		Project("LastUpdate").
+		Limit(1).
+		Run(c).
+		Next(&s)
+	if err == datastore.Done {
+		err = nil
+	}
+	return
+}

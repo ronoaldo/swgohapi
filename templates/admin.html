@@ -1,0 +1,10 @@
+{{ define "content" }}
+<div class="row">
+    <div class="col-lg-12">
+        <h1>Admin Page</h1>
+        <p>Total profiles: {{ .Stats.PlayerCount }}</p>
+        <p>Total profiles to be synced: {{ .Stats.StalePlayerCount }}</p>
+        <p>Oldest player sync: {{ .Stats.OldestPlayerSync.Format "Jan, 2 2006 15:03" }} </p>
+    </div>
+</div>
+{{ end }}
