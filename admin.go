@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"time"
 
 	"golang.org/x/net/context"
 	"google.golang.org/appengine/log"
@@ -18,6 +19,7 @@ func init() {
 func adminHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := appengine.NewContext(r)
 	values := make(map[string]interface{})
+	values["Now"] = time.Now().Format(time.RFC3339)
 	switch r.Method {
 	case "GET":
 		stats, err := GetPlayerStats(ctx)
@@ -26,6 +28,13 @@ func adminHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		values["Stats"] = stats
+		values["SinceOldestUpdate"] = time.Since(stats.OldestPlayerSync)
+		stale, err := ListStalePlayers(ctx)
+		if err != nil {
+			errorf(ctx, w, "Error listing stale players: %v", err)
+			return
+		}
+		values["StalePlayers"] = stale
 		err = renderTemplate(w, "admin.html", values)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
