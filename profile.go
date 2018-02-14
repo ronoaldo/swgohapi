@@ -92,18 +92,27 @@ func ReloadProfile(c context.Context, user string, fullUpdate bool) (*Profile, e
 	profile.LastUpdate = time.Now()
 
 	log.Infof(c, "Loading collection ...")
-	if profile.Collection, err = gg.Collection(); err != nil {
+	collection, err := gg.Collection()
+	if err != nil {
 		return profile, err
 	}
-	log.Infof(c, "Loading ships ...")
-	if profile.Ships, err = gg.Ships(); err != nil {
-		return profile, err
+	profile.Collection = collection.MinRarity(1)
+	hasChewe := profile.Collection.Contains("Clone Wars Chewbacca")
+	log.Infof(c, "Collection loaded. Has Chewe? %v", hasChewe)
+
+	if hasChewe {
+		log.Infof(c, "Loading ships ...")
+		if profile.Ships, err = gg.Ships(); err != nil {
+			return profile, err
+		}
+		/*log.Infof(c, "Loading character stats ...")
+		if err = fetchAllStats(c, gg, profile); err != nil {
+			log.Warningf(c, "Errors during fetchAllstats: %#v", err)
+		}
+		*/
+	} else {
+		log.Infof(c, "Skippeed Ships because without chewe profile has no data!")
 	}
-	/*log.Infof(c, "Loading character stats ...")
-	if err = fetchAllStats(c, gg, profile); err != nil {
-		log.Warningf(c, "Errors during fetchAllstats: %#v", err)
-	}
-	*/
 	playerData := &PlayerData{}
 	if err = playerData.Encode(profile); err != nil {
 		return profile, err

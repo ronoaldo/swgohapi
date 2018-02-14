@@ -132,7 +132,7 @@ func GetPlayerStats(c context.Context) (s PlayerStats, err error) {
 func ListStalePlayers(c context.Context) (profiles []PlayerData, err error) {
 	q := datastore.NewQuery(PlayerDataKind).
 		Filter("LastUpdate <= ", time.Now().AddDate(0, 0, -1)).
-		Order("-LastUpdate").
+		Order("LastUpdate").
 		Limit(100)
 	keys, err := q.GetAll(c, &profiles)
 	if err != nil {
